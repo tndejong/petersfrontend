@@ -59,7 +59,12 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      handleSubmit(e as any)
+      e.preventDefault()
+      // Create a synthetic form event for the submit handler
+      const syntheticEvent = {
+        preventDefault: () => {},
+      } as React.FormEvent
+      handleSubmit(syntheticEvent)
     }
   }
 
@@ -73,7 +78,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           <div>
             <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Please sign in to access Peter's AI Assistant
+              Please sign in to access Peter&apos;s AI Assistant
             </CardDescription>
           </div>
         </CardHeader>
