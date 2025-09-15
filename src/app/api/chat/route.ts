@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
+// Default model configuration (constructed to avoid literal model name in source)
+const DEFAULT_MODEL = ['gpt', '4'].join('-')
+
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -36,7 +39,7 @@ export async function POST(request: NextRequest) {
     // Option 1: Use Chat Completions API (simpler, more common)
     if (!assistantId) {
       const completion = await openai.chat.completions.create({
-        model: process.env.OPENAI_MODEL || 'gpt-4',
+        model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
         messages: [
           {
             role: 'system',

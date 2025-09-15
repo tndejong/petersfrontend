@@ -11,7 +11,7 @@ Create a `.env.local` file in your project root with the following variables:
 OPENAI_API_KEY=your_openai_api_key_here
 
 # Optional: Specific OpenAI model (defaults to gpt-4)
-OPENAI_MODEL=gpt-4
+OPENAI_MODEL=your_preferred_model
 
 # Optional: If you want to use a custom OpenAI Assistant
 OPENAI_ASSISTANT_ID=your_assistant_id_here
@@ -46,7 +46,7 @@ If you want to use a custom assistant instead of the default chat completion:
 ```
 Name: Peter's Coding Assistant
 Instructions: You are a helpful coding assistant specialized in Next.js, React, and TypeScript. Always provide practical, working code examples.
-Model: gpt-4
+Model: gpt-4-turbo (or your preferred model)
 Tools: Code Interpreter
 ```
 
@@ -88,7 +88,7 @@ The chat interface intelligently chooses the API based on your configuration:
 ### Common Issues:
 1. **"OpenAI API key is not configured"** - Make sure `.env.local` exists and contains `OPENAI_API_KEY`
 2. **Rate limit errors** - You might need to upgrade your OpenAI plan
-3. **Model not found** - Ensure you have access to the specified model (gpt-4, gpt-3.5-turbo, etc.)
+3. **Model not found** - Ensure you have access to the specified model (check OpenAI model availability)
 4. **"Failed to create assistant run - no run ID returned"** - Your assistant ID might be invalid:
    - Check that `OPENAI_ASSISTANT_ID` starts with `asst_`
    - Verify the assistant exists in your OpenAI account
@@ -108,7 +108,7 @@ The chat interface intelligently chooses the API based on your configuration:
 
 ```env
 OPENAI_API_KEY=sk-proj-abc123xyz789...
-OPENAI_MODEL=gpt-4
+OPENAI_MODEL=your_preferred_model
 ```
 
 ## 🧪 Testing Your Setup

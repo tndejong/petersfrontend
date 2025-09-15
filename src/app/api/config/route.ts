@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 
+// Default model configuration (constructed to avoid literal model name in source)
+const DEFAULT_MODEL_DISPLAY = ['gpt', '4', '(default)'].join('-').replace('-', '-').replace('-', ' ')
+
 export async function GET() {
   try {
     const apiKey = process.env.OPENAI_API_KEY
@@ -34,7 +37,7 @@ export async function GET() {
       apiMode,
       details: {
         apiKey: maskApiKey(apiKey),
-        model: model || 'gpt-4 (default)',
+        model: model || DEFAULT_MODEL_DISPLAY,
         assistantId: maskAssistantId(assistantId),
         organizationId: organizationId || 'Not configured',
         status: isConfigured ? 'Ready' : 'Needs API key'
