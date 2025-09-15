@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
     
     // Use assistant ID from environment variable or request body
     const assistantId = process.env.OPENAI_ASSISTANT_ID
+    const forceDirectMode = process.env.OPENAI_FORCE_DIRECT === 'true'
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -36,8 +37,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Option 1: Use Chat Completions API (simpler, more common)
-    if (!assistantId) {
+    // Option 1: Use Chat Completions API (simpler, faster, more common)
+    if (!assistantId || forceDirectMode) {
+      if (forceDirectMode) {
+        console.log('🚀 Force direct mode enabled - using fast Chat Completions API')
+      }
       const completion = await openai.chat.completions.create({
         model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
         messages: [
@@ -112,20 +116,22 @@ export async function POST(request: NextRequest) {
       
       console.log('Using stored IDs - Thread:', threadId, 'Run:', runId)
 
-      // Poll for completion with proper error handling
+      // Poll for completion with optimized timing
       let attempts = 0
-      const maxAttempts = 30 // 30 seconds timeout
+      const maxAttempts = 20 // Reduced from 30 to 20 attempts
       let currentStatus = run.status
       
       console.log('Starting to poll for run completion...')
       
       while (attempts < maxAttempts && (currentStatus === 'queued' || currentStatus === 'in_progress')) {
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        // Progressive delay: start fast, then slow down
+        const delay = attempts < 3 ? 250 : attempts < 8 ? 500 : 1000
+        await new Promise(resolve => setTimeout(resolve, delay))
         attempts++
         
         try {
           // Try to get run status using the run object directly
-          console.log(`Polling attempt ${attempts}...`)
+          console.log(`Polling attempt ${attempts} (delay: ${delay}ms)...`)
           
           // Refresh the run status by fetching the run again
           const refreshedRun = await openai.beta.threads.runs.list(threadId, { limit: 1 })
@@ -146,6 +152,12 @@ export async function POST(request: NextRequest) {
             console.log('Could not find run in list')
             break
           }
+          
+          // Early fallback after 8 attempts (~4 seconds) for better UX
+          if (attempts >= 8) {
+            console.log('Assistant taking longer than expected, considering fallback...')
+          }
+          
         } catch (pollError) {
           console.error('Error polling run status:', pollError)
           break
@@ -177,7 +189,8 @@ export async function POST(request: NextRequest) {
       }
 
       // If we get here, the assistant didn't respond properly
-      console.log(`Assistant did not complete successfully (status: ${currentStatus}), falling back to Chat Completions`)
+      const timeoutReason = attempts >= maxAttempts ? `timeout after ${attempts} attempts` : `incomplete status: ${currentStatus}`
+      console.log(`Assistant ${timeoutReason}, falling back to Chat Completions`)
       
     } catch (assistantError) {
       console.error('Assistant API Error:', assistantError)

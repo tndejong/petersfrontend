@@ -56,6 +56,7 @@ export function ChatInterface() {
   ])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingStatus, setLoadingStatus] = useState("")
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([
     {
       id: "1",
@@ -80,8 +81,10 @@ export function ChatInterface() {
     scrollToBottom()
   }, [messages])
 
-  const sendMessageToOpenAI = async (conversationMessages: Message[]): Promise<string> => {
+  const sendMessageToOpenAI = async (conversationMessages: Message[], updateStatus?: (status: string) => void): Promise<string> => {
     try {
+      updateStatus?.("📤 Sending message to AI...")
+      
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -95,25 +98,35 @@ export function ChatInterface() {
         })
       })
 
+      updateStatus?.("⏳ AI is thinking...")
+
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || 'Failed to get response from AI')
       }
 
+      updateStatus?.("🔄 Processing AI response...")
       const data = await response.json()
       
       // Log if assistant was used or if it fell back to chat completions
       if (data.assistantUsed) {
         console.log('✅ Response from custom OpenAI Assistant')
+        updateStatus?.("🤖 Custom assistant responded!")
       } else if (data.fallback) {
         console.log('⚠️ Fell back to Chat Completions API (Assistant failed or timed out)')
+        updateStatus?.("⚡ Assistant busy, using fast AI...")
       } else {
         console.log('💬 Response from Chat Completions API')
+        updateStatus?.("💬 AI responded!")
       }
+      
+      // Small delay to show the final status
+      await new Promise(resolve => setTimeout(resolve, 500))
       
       return data.message || 'I apologize, but I couldn\'t generate a response at the moment.'
     } catch (error) {
       console.error('Error calling OpenAI API:', error)
+      updateStatus?.("❌ Error occurred, please try again...")
       
       // Fallback to a simple error message
       if (error instanceof Error) {
@@ -137,6 +150,7 @@ export function ChatInterface() {
     setMessages(prev => [...prev, userMessage])
     setInput("")
     setIsLoading(true)
+    setLoadingStatus("📝 Preparing your message...")
 
     // Update chat title if this is the first user message
     const currentSession = chatSessions.find(s => s.id === currentSessionId)
@@ -153,8 +167,9 @@ export function ChatInterface() {
 
     try {
       // Get AI response from OpenAI
+      setLoadingStatus("🔗 Connecting to AI...")
       const updatedMessages = [...messages, userMessage]
-      const aiResponse = await sendMessageToOpenAI(updatedMessages)
+      const aiResponse = await sendMessageToOpenAI(updatedMessages, setLoadingStatus)
       
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -165,6 +180,7 @@ export function ChatInterface() {
       
       setMessages(prev => [...prev, assistantMessage])
       setIsLoading(false)
+      setLoadingStatus("")
 
       // Update the current session with the new messages
       setChatSessions(prev => 
@@ -186,6 +202,7 @@ export function ChatInterface() {
       
       setMessages(prev => [...prev, errorMessage])
       setIsLoading(false)
+      setLoadingStatus("")
     }
   }
 
@@ -424,11 +441,16 @@ export function ChatInterface() {
                     <Bot className="h-4 w-4" />
                   </AvatarFallback>
                 </Avatar>
-                <div className="bg-muted rounded-lg px-4 py-2">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
-                    <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
+                <div className="bg-muted rounded-lg px-4 py-2 max-w-md">
+                  <div className="flex items-center gap-2">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
+                      <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
+                    </div>
+                    <span className="text-sm text-muted-foreground ml-2">
+                      {loadingStatus || "Thinking..."}
+                    </span>
                   </div>
                 </div>
               </div>
