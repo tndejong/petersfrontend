@@ -39,7 +39,7 @@ export async function GET() {
         organizationId: organizationId || 'Not configured',
         status: isConfigured ? 'Ready' : 'Needs API key'
       },
-      recommendations: []
+      recommendations: [] as string[]
     }
 
     // Add recommendations based on current config
