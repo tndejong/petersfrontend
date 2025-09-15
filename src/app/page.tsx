@@ -1,5 +1,5 @@
-import { ChatInterface } from "@/components/chat-interface";
+import { AuthWrapper } from "@/components/auth-wrapper";
 
 export default function Home() {
-  return <ChatInterface />;
+  return <AuthWrapper />;
 }

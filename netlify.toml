@@ -2,7 +2,7 @@
   command = "npm run build"
   publish = ".next"
 
-# Configure secrets scanning to ignore OPENAI_MODEL since it's not sensitive
+# Configure secrets scanning to ignore non-sensitive values
 [build.environment]
-  SECRETS_SCAN_OMIT_KEYS = "OPENAI_MODEL"
+  SECRETS_SCAN_OMIT_KEYS = "OPENAI_MODEL,LOGIN_USERNAME"
   SECRETS_SCAN_OMIT_PATHS = "OPENAI_SETUP.md"

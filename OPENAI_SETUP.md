@@ -18,6 +18,13 @@ OPENAI_ASSISTANT_ID=your_assistant_id_here
 
 # Optional: Organization ID (only if you have one)
 OPENAI_ORGANIZATION_ID=your_organization_id_here
+
+# Required: Login credentials for website access
+LOGIN_USERNAME=your_username
+LOGIN_PASSWORD=your_secure_password
+
+# Optional: Force direct mode for faster responses (skip Assistant API)
+# OPENAI_FORCE_DIRECT=true
 ```
 
 ## How to Get Your Credentials
@@ -56,6 +63,21 @@ Only needed if you're part of an OpenAI organization:
 1. Go to [OpenAI Organization Settings](https://platform.openai.com/account/organization)
 2. Copy your Organization ID
 3. Add it as `OPENAI_ORGANIZATION_ID` in your `.env.local` file
+
+### 4. Login Credentials (Required)
+Set up username and password for website access:
+
+1. Choose a secure username and password
+2. Add them to your `.env.local` file:
+   ```env
+   LOGIN_USERNAME=admin
+   LOGIN_PASSWORD=your_secure_password_here
+   ```
+
+**Security Tips:**
+- Use a strong password (minimum 12 characters)
+- Don't use the same password as other accounts
+- Never commit your `.env.local` file to version control
 
 ## API Usage
 
@@ -109,6 +131,8 @@ The chat interface intelligently chooses the API based on your configuration:
 ```env
 OPENAI_API_KEY=sk-proj-abc123xyz789...
 OPENAI_MODEL=your_preferred_model
+LOGIN_USERNAME=admin
+LOGIN_PASSWORD=my_secure_password_123
 ```
 
 ## 🧪 Testing Your Setup
