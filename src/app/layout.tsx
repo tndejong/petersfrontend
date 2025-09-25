@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Peter's AI Assistant",
+  title: "Pool Techniek AI Assistant",
   description: "A ChatGPT-like AI assistant built with Next.js and shadcn/ui",
 };
 
