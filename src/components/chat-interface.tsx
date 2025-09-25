@@ -29,17 +29,20 @@ interface ChatSession {
   title: string
   messages: Message[]
   createdAt: Date
+  lastResponseId?: string // Track the last response ID for conversation continuity
 }
 
 interface ConfigInfo {
   isConfigured: boolean
   hasAssistant: boolean
+  hasVectorStores: boolean
   apiMode: string
   details: {
     apiKey: string
     model: string
     assistantId: string
     organizationId: string
+    vectorStores: string
     status: string
   }
   recommendations: string[]
@@ -81,21 +84,33 @@ export function ChatInterface() {
     scrollToBottom()
   }, [messages])
 
-  const sendMessageToOpenAI = async (conversationMessages: Message[], updateStatus?: (status: string) => void): Promise<string> => {
+  const sendMessageToOpenAI = async (
+    conversationMessages: Message[], 
+    updateStatus?: (status: string) => void,
+    previousResponseId?: string
+  ): Promise<{message: string, responseId?: string}> => {
     try {
       updateStatus?.("📤 Sending message to AI...")
+      
+      const requestBody: any = {
+        messages: conversationMessages.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }))
+      }
+
+      // Include previous response ID for conversation continuity with Response API
+      if (previousResponseId) {
+        requestBody.previousResponseId = previousResponseId
+        console.log('🔗 Continuing conversation with Response ID:', previousResponseId)
+      }
       
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messages: conversationMessages.map(msg => ({
-            role: msg.role,
-            content: msg.content
-          }))
-        })
+        body: JSON.stringify(requestBody)
       })
 
       updateStatus?.("⏳ AI is thinking...")
@@ -108,32 +123,40 @@ export function ChatInterface() {
       updateStatus?.("🔄 Processing AI response...")
       const data = await response.json()
       
-      // Log if assistant was used or if it fell back to chat completions
-      if (data.assistantUsed) {
-        console.log('✅ Response from custom OpenAI Assistant')
-        updateStatus?.("🤖 Custom assistant responded!")
-      } else if (data.fallback) {
-        console.log('⚠️ Fell back to Chat Completions API (Assistant failed or timed out)')
-        updateStatus?.("⚡ Assistant busy, using fast AI...")
+      // Log which API mode was used
+      if (data.apiMode === 'response_api') {
+        console.log('✅ Response from Response API (using OpenAI SDK)')
+        if (data.hasFileSearch) {
+          updateStatus?.("🔍 Response API with file search responded!")
+        } else {
+          updateStatus?.("🚀 Response API responded!")
+        }
       } else {
-        console.log('💬 Response from Chat Completions API')
+        console.log('💬 Unexpected API mode:', data.apiMode)
         updateStatus?.("💬 AI responded!")
       }
       
       // Small delay to show the final status
       await new Promise(resolve => setTimeout(resolve, 500))
       
-      return data.message || 'I apologize, but I couldn\'t generate a response at the moment.'
+      return {
+        message: data.message || 'I apologize, but I couldn\'t generate a response at the moment.',
+        responseId: data.responseId // Store response ID for future requests
+      }
     } catch (error) {
       console.error('Error calling OpenAI API:', error)
       updateStatus?.("❌ Error occurred, please try again...")
       
       // Fallback to a simple error message
       if (error instanceof Error) {
-        return `I'm sorry, I'm having trouble connecting right now. Error: ${error.message}`
+        return {
+          message: `I'm sorry, I'm having trouble connecting right now. Error: ${error.message}`
+        }
       }
       
-      return "I'm sorry, I'm experiencing technical difficulties. Please try again later."
+      return {
+        message: "I'm sorry, I'm experiencing technical difficulties. Please try again later."
+      }
     }
   }
 
@@ -169,11 +192,20 @@ export function ChatInterface() {
       // Get AI response from OpenAI
       setLoadingStatus("🔗 Connecting to AI...")
       const updatedMessages = [...messages, userMessage]
-      const aiResponse = await sendMessageToOpenAI(updatedMessages, setLoadingStatus)
+      
+      // Get the current session's last response ID for conversation continuity
+      const currentSession = chatSessions.find(s => s.id === currentSessionId)
+      const previousResponseId = currentSession?.lastResponseId
+      
+      const aiResponseData = await sendMessageToOpenAI(
+        updatedMessages, 
+        setLoadingStatus, 
+        previousResponseId
+      )
       
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: aiResponse,
+        content: aiResponseData.message,
         role: "assistant",
         timestamp: new Date()
       }
@@ -182,11 +214,15 @@ export function ChatInterface() {
       setIsLoading(false)
       setLoadingStatus("")
 
-      // Update the current session with the new messages
+      // Update the current session with the new messages and response ID
       setChatSessions(prev => 
         prev.map(session => 
           session.id === currentSessionId 
-            ? { ...session, messages: [...updatedMessages, assistantMessage] }
+            ? { 
+                ...session, 
+                messages: [...updatedMessages, assistantMessage],
+                lastResponseId: aiResponseData.responseId // Store the response ID for next message
+              }
             : session
         )
       )
@@ -551,6 +587,21 @@ export function ChatInterface() {
                       <p className="text-sm text-muted-foreground">
                         {configInfo.details.organizationId}
                       </p>
+                    </div>
+                    
+                    <div className="space-y-2 md:col-span-2">
+                      <h4 className="text-sm font-medium flex items-center gap-2">
+                        <span>Vector Stores</span>
+                        {configInfo.hasVectorStores && <span className="text-green-600">🔍</span>}
+                      </h4>
+                      <p className="text-sm text-muted-foreground font-mono">
+                        {configInfo.details.vectorStores}
+                      </p>
+                      {configInfo.hasVectorStores && (
+                        <p className="text-xs text-green-600">
+                          File search enabled - your assistant can search uploaded documents
+                        </p>
+                      )}
                     </div>
                   </div>
 

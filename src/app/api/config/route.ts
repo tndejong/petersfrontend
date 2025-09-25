@@ -9,6 +9,7 @@ export async function GET() {
     const assistantId = process.env.OPENAI_ASSISTANT_ID
     const model = process.env.OPENAI_MODEL
     const organizationId = process.env.OPENAI_ORGANIZATION_ID
+    const vectorStoreIds = process.env.OPENAI_VECTOR_STORE_IDS
 
     // Helper function to safely display API key
     const maskApiKey = (key: string | undefined): string => {
@@ -24,22 +25,34 @@ export async function GET() {
       return `${id.substring(0, 10)}...${id.substring(id.length - 4)}`
     }
 
+    // Helper function to display vector store IDs
+    const formatVectorStores = (ids: string | undefined): string => {
+      if (!ids) return 'Not configured'
+      const stores = ids.split(',').map(id => id.trim()).filter(Boolean)
+      if (stores.length === 0) return 'Not configured'
+      if (stores.length === 1) return `1 store: ${stores[0].substring(0, 8)}...`
+      return `${stores.length} stores: ${stores.map(id => id.substring(0, 8) + '...').join(', ')}`
+    }
+
     // Determine API mode
-    const apiMode = assistantId ? 'Assistants API (with fallback)' : 'Chat Completions API'
+    const apiMode = 'Response API only (standard models + file search)'
 
     // Check if configuration is complete
     const isConfigured = !!apiKey
     const hasAssistant = !!assistantId
+    const hasVectorStores = !!vectorStoreIds && vectorStoreIds.split(',').filter(Boolean).length > 0
 
     const config = {
       isConfigured,
       hasAssistant,
+      hasVectorStores,
       apiMode,
       details: {
         apiKey: maskApiKey(apiKey),
         model: model || DEFAULT_MODEL_DISPLAY,
         assistantId: maskAssistantId(assistantId),
         organizationId: organizationId || 'Not configured',
+        vectorStores: formatVectorStores(vectorStoreIds),
         status: isConfigured ? 'Ready' : 'Needs API key'
       },
       recommendations: [] as string[]
@@ -50,12 +63,22 @@ export async function GET() {
       config.recommendations.push('Add OPENAI_API_KEY to your .env.local file')
     }
 
-    if (isConfigured && !hasAssistant) {
-      config.recommendations.push('Consider adding OPENAI_ASSISTANT_ID for custom assistant features')
+    if (isConfigured && !hasVectorStores) {
+      config.recommendations.push('Add OPENAI_VECTOR_STORE_IDS to your .env.local file for file search capabilities')
     }
 
-    if (isConfigured && hasAssistant) {
-      config.recommendations.push('✅ Full configuration detected - using custom assistant with fallback')
+    if (isConfigured && hasVectorStores) {
+      config.recommendations.push('✅ Full configuration detected - using Response API only with standard models and file search')
+    } else if (isConfigured) {
+      config.recommendations.push('✅ API configured - add vector stores for file search capabilities')
+    }
+
+    if (isConfigured) {
+      config.recommendations.push('🚀 Using official OpenAI Node.js SDK for Response API calls only (no fallback)')
+    }
+
+    if (hasVectorStores) {
+      config.recommendations.push('🔍 File search enabled with vector stores - your assistant can search uploaded documents')
     }
 
     return NextResponse.json(config)
