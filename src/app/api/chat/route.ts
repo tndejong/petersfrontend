@@ -24,8 +24,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { messages, previousResponseId } = body
     
-    // Use assistant ID and vector store IDs from environment variables
-    const assistantId = process.env.OPENAI_ASSISTANT_ID
+    // Use vector store IDs from environment variables
     const vectorStoreIds = process.env.OPENAI_VECTOR_STORE_IDS?.split(',').map(id => id.trim()).filter(Boolean) || []
     const forceDirectMode = process.env.OPENAI_FORCE_DIRECT === 'true'
 

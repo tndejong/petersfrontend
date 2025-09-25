@@ -48,6 +48,14 @@ interface ConfigInfo {
   recommendations: string[]
 }
 
+interface ChatRequestBody {
+  messages: Array<{
+    role: string
+    content: string
+  }>
+  previousResponseId?: string
+}
+
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -92,7 +100,7 @@ export function ChatInterface() {
     try {
       updateStatus?.("📤 Sending message to AI...")
       
-      const requestBody: any = {
+      const requestBody: ChatRequestBody = {
         messages: conversationMessages.map(msg => ({
           role: msg.role,
           content: msg.content
