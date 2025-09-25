@@ -78,7 +78,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           <div>
             <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Please sign in to access Peter&apos;s AI Assistant
+              Please sign in to access POOL Techniek&apos;s AI Assistant
             </CardDescription>
           </div>
         </CardHeader>
