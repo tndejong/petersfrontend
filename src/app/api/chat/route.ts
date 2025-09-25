@@ -14,13 +14,19 @@ export interface ChatMessage {
   content: string
 }
 
+export interface ResponseApiMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { messages } = body
+    const { messages, previousResponseId } = body
     
-    // Use assistant ID from environment variable or request body
+    // Use assistant ID and vector store IDs from environment variables
     const assistantId = process.env.OPENAI_ASSISTANT_ID
+    const vectorStoreIds = process.env.OPENAI_VECTOR_STORE_IDS?.split(',').map(id => id.trim()).filter(Boolean) || []
     const forceDirectMode = process.env.OPENAI_FORCE_DIRECT === 'true'
 
     if (!process.env.OPENAI_API_KEY) {
@@ -37,202 +43,133 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Option 1: Use Chat Completions API (simpler, faster, more common)
-    if (!assistantId || forceDirectMode) {
-      if (forceDirectMode) {
-        console.log('🚀 Force direct mode enabled - using fast Chat Completions API')
-      }
-      const completion = await openai.chat.completions.create({
-        model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are Peter\'s helpful AI assistant. You are knowledgeable, friendly, and concise in your responses.'
-          },
-          ...messages
-        ],
-        max_tokens: 1000,
-        temperature: 0.7,
-      })
+    // Use Response API with standard models and file search (no fallback)
+    if (!forceDirectMode) {
+      try {
+        console.log('🚀 Using Response API with vector store support (standard model)')
 
-      const assistantMessage = completion.choices[0]?.message?.content
+        // Prepare the conversation messages for Response API
+        const conversationMessages = messages.map(msg => ({
+          role: msg.role === 'system' ? 'user' : msg.role as 'user' | 'assistant',
+          content: msg.content
+        }))
 
-      if (!assistantMessage) {
+        const model = process.env.OPENAI_MODEL || DEFAULT_MODEL
+
+        console.log('📤 Sending to Response API with model:', model)
+        console.log('📝 Message count:', conversationMessages.length)
+        if (vectorStoreIds.length > 0) {
+          console.log('🗂️ Vector stores:', vectorStoreIds)
+        }
+
+        // Use the OpenAI SDK's Response API method with file search capabilities
+        console.log(`🚀 Calling Response API using OpenAI SDK`)
+        
+        interface FileSearchTool {
+          type: 'file_search'
+          vector_store_ids: string[]
+        }
+
+        interface ResponseParams {
+          model: string
+          input: ResponseApiMessage[]
+          tools?: FileSearchTool[]
+          previous_response_id?: string
+        }
+
+        const createParams: ResponseParams = {
+          model: model,
+          input: conversationMessages
+        }
+
+        // Add file search tool with vector store IDs if vector stores are available
+        if (vectorStoreIds.length > 0) {
+          createParams.tools = [
+            {
+              type: 'file_search',
+              vector_store_ids: vectorStoreIds
+            }
+          ]
+          console.log('🔍 Enabled file search with vector stores:', vectorStoreIds)
+        }
+
+        // Add previous_response_id for conversation continuity if available
+        if (previousResponseId) {
+          createParams.previous_response_id = previousResponseId
+          console.log('🔗 Including previous_response_id for conversation continuity')
+        }
+        
+        const responseData = await openai.responses.create(createParams)
+        
+        console.log('✅ Response API successful using SDK')
+
+        // Extract the assistant's message from the Response API SDK response
+        let assistantMessage: string | undefined
+
+        // Method 1: Check if there's an output_text field at the root level (simplest approach)
+        if (responseData.output_text) {
+          assistantMessage = responseData.output_text
+          console.log('✅ Extracted message from output_text field')
+        }
+        
+        // Method 2: Extract from output array if Method 1 didn't work
+        if (!assistantMessage && responseData.output && responseData.output.length > 0) {
+          const outputItem = responseData.output[0]
+          // Check if it's a message type output
+          if (outputItem.type === 'message' && 'content' in outputItem) {
+            const messageOutput = outputItem as {
+              content: Array<{ type: string; text?: string }>
+            }
+            if (messageOutput.content && messageOutput.content.length > 0) {
+              const content = messageOutput.content[0]
+              // Response API uses 'output_text' type, not 'text'
+              if ((content.type === 'output_text' || content.type === 'text') && content.text) {
+                assistantMessage = content.text
+                console.log('✅ Extracted message from output array')
+              }
+            }
+          }
+        }
+
+        if (!assistantMessage) {
+          console.error('No message content in Response API response:', responseData)
+          console.error('Response structure:', JSON.stringify(responseData, null, 2))
+          throw new Error('No response content from Response API')
+        }
+
+        console.log('✅ Extracted message from Response API SDK:', assistantMessage.substring(0, 100) + '...')
+
+        return NextResponse.json({
+          message: assistantMessage,
+          responseId: responseData.id, // Store the response ID for future conversation continuity
+          assistantUsed: false, // Not using assistant ID in this call
+          apiMode: 'response_api',
+          hasFileSearch: vectorStoreIds.length > 0 // Indicate if file search is enabled
+        })
+
+      } catch (responseApiError) {
+        console.error('Response API Error:', responseApiError)
+        
+        // Return error instead of falling back
+        if (responseApiError instanceof Error) {
+          return NextResponse.json(
+            { error: `Response API Error: ${responseApiError.message}` },
+            { status: 500 }
+          )
+        }
+
         return NextResponse.json(
-          { error: 'No response from OpenAI' },
+          { error: 'Response API failed' },
           { status: 500 }
         )
       }
-
-      return NextResponse.json({
-        message: assistantMessage,
-        usage: completion.usage
-      })
-    }
-
-    // Option 2: Use Assistants API (for custom assistants)
-    try {
-      console.log('Using Assistant API with ID:', assistantId)
-      
-      // Validate assistant ID format
-      if (!assistantId.startsWith('asst_')) {
-        throw new Error(`Invalid assistant ID format: ${assistantId}. Should start with 'asst_'`)
-      }
-      
-      // Create a thread
-      const thread = await openai.beta.threads.create()
-      console.log('Thread created:', thread.id)
-
-      // Add the user message to the thread
-      await openai.beta.threads.messages.create(thread.id, {
-        role: 'user',
-        content: messages[messages.length - 1].content
-      })
-      console.log('Message added to thread')
-
-      // Run the assistant
-      console.log('Creating run with assistant_id:', assistantId)
-      const run = await openai.beta.threads.runs.create(thread.id, {
-        assistant_id: assistantId
-      })
-
-      // Check if run was created successfully
-      if (!run || !run.id) {
-        console.error('Run creation failed - no run object or ID:', run)
-        throw new Error('Failed to create assistant run - no run ID returned')
-      }
-
-      console.log('Assistant run created successfully:', run.id, 'Status:', run.status)
-      console.log('Thread ID:', thread.id, 'Run ID:', run.id)
-
-      // Store IDs in variables to prevent any reference issues
-      const threadId = thread.id
-      const runId = run.id
-      
-      // Validate IDs before proceeding
-      if (!threadId || !runId) {
-        throw new Error(`Invalid IDs - Thread: ${threadId}, Run: ${runId}`)
-      }
-      
-      console.log('Using stored IDs - Thread:', threadId, 'Run:', runId)
-
-      // Poll for completion with optimized timing
-      let attempts = 0
-      const maxAttempts = 20 // Reduced from 30 to 20 attempts
-      let currentStatus = run.status
-      
-      console.log('Starting to poll for run completion...')
-      
-      while (attempts < maxAttempts && (currentStatus === 'queued' || currentStatus === 'in_progress')) {
-        // Progressive delay: start fast, then slow down
-        const delay = attempts < 3 ? 250 : attempts < 8 ? 500 : 1000
-        await new Promise(resolve => setTimeout(resolve, delay))
-        attempts++
-        
-        try {
-          // Try to get run status using the run object directly
-          console.log(`Polling attempt ${attempts} (delay: ${delay}ms)...`)
-          
-          // Refresh the run status by fetching the run again
-          const refreshedRun = await openai.beta.threads.runs.list(threadId, { limit: 1 })
-          const latestRun = refreshedRun.data.find(r => r.id === runId)
-          
-          if (latestRun) {
-            currentStatus = latestRun.status
-            console.log(`Run status: ${currentStatus}`)
-            
-            if (currentStatus === 'completed') {
-              console.log('Run completed! Fetching messages...')
-              break
-            } else if (currentStatus === 'failed' || currentStatus === 'cancelled' || currentStatus === 'expired') {
-              console.log(`Run ended with status: ${currentStatus}`)
-              break
-            }
-          } else {
-            console.log('Could not find run in list')
-            break
-          }
-          
-          // Early fallback after 8 attempts (~4 seconds) for better UX
-          if (attempts >= 8) {
-            console.log('Assistant taking longer than expected, considering fallback...')
-          }
-          
-        } catch (pollError) {
-          console.error('Error polling run status:', pollError)
-          break
-        }
-      }
-      
-      // Try to get the messages from the thread
-      if (currentStatus === 'completed') {
-        try {
-          const threadMessages = await openai.beta.threads.messages.list(threadId)
-          console.log('Retrieved thread messages, count:', threadMessages.data.length)
-          
-          // Find the most recent assistant message (should be first)
-          const assistantMessage = threadMessages.data.find(msg => msg.role === 'assistant')
-          
-          if (assistantMessage && assistantMessage.content[0] && assistantMessage.content[0].type === 'text') {
-            console.log('Found assistant response!')
-            return NextResponse.json({
-              message: assistantMessage.content[0].text.value,
-              threadId: threadId,
-              assistantUsed: true
-            })
-          } else {
-            console.log('No assistant message found in thread')
-          }
-        } catch (messageError) {
-          console.error('Error retrieving thread messages:', messageError)
-        }
-      }
-
-      // If we get here, the assistant didn't respond properly
-      const timeoutReason = attempts >= maxAttempts ? `timeout after ${attempts} attempts` : `incomplete status: ${currentStatus}`
-      console.log(`Assistant ${timeoutReason}, falling back to Chat Completions`)
-      
-    } catch (assistantError) {
-      console.error('Assistant API Error:', assistantError)
-      
-      // Log specific error details for debugging
-      if (assistantError instanceof Error) {
-        console.error('Error details:', assistantError.message)
-      }
-      
-      // Fall back to chat completions API if assistant fails
-    }
-
-    // Fallback: If assistant fails or times out, use chat completions
-    console.log('Falling back to Chat Completions API')
-    const completion = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are Peter\'s helpful AI assistant. You are knowledgeable, friendly, and concise in your responses.'
-        },
-        ...messages
-      ],
-      max_tokens: 1000,
-      temperature: 0.7,
-    })
-
-    const assistantMessage = completion.choices[0]?.message?.content
-
-    if (!assistantMessage) {
+    } else {
+      // Force direct mode is enabled - return error
       return NextResponse.json(
-        { error: 'No response from OpenAI' },
-        { status: 500 }
+        { error: 'Force direct mode is enabled, but only Response API is supported' },
+        { status: 400 }
       )
     }
-
-    return NextResponse.json({
-      message: assistantMessage,
-      usage: completion.usage,
-      assistantUsed: false,
-      fallback: true
-    })
 
   } catch (error) {
     console.error('OpenAI API Error:', error)
