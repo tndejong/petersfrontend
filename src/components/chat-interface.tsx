@@ -411,7 +411,7 @@ export function ChatInterface() {
               >
                 {showMobileSidebar ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
               </Button>
-              <h1 className="text-xl font-semibold">Peter&apos;s AI Assistant</h1>
+              <h1 className="text-xl font-semibold">POOL Techniek&apos;s AI Assistant</h1>
             </div>
             <div className="flex items-center gap-2">
               <Button 
